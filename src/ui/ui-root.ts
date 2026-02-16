@@ -84,7 +84,7 @@ export const render = async (program: Command, shell: Shell, underTest: boolean,
   let renderId = uuidV4();
   const stdinStartedInRawMode = process.stdin.isRaw;
   if (process.stdin.isTTY) process.stdin.setRawMode(true);
-  readline.emitKeypressEvents(process.stdin);
+  readline.emitKeypressEvents(process.stdin, { escapeCodeTimeout: 50 } as unknown as readline.Interface);
 
   const writeOutput = (data: string) => {
     log.debug({ msg: "writing data", data });
@@ -121,7 +121,11 @@ export const render = async (program: Command, shell: Shell, underTest: boolean,
     const press = keyPress[1];
     const inputHandled = suggestionManager.update(press);
     if (hasSuggestion && inputHandled) {
-      term.noop();
+      if (!suggestionManager.hasSuggestions) {
+        hasSuggestion = _render(term, suggestionManager, "", false, true);
+      } else {
+        term.noop();
+      }
     } else if (!inputHandled) {
       if (press.name == "backspace") {
         handlingBackspace = true;

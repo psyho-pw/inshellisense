@@ -47,6 +47,18 @@ loadSpecsSet(speclist as string[], versionedSpeclist, specResourcesPath);
 
 const loadedSpecs: { [key: string]: Fig.Spec } = {};
 
+// Built-in spec patches applied after loading from @withfig/autocomplete
+const specPatches: Record<string, (spec: Fig.Spec) => Fig.Spec> = {
+  // Make cd's argument variadic so subdirectory suggestions continue after selecting a folder
+  cd: (spec) => {
+    if (typeof spec === "function") return spec;
+    if (spec.args && !(spec.args instanceof Array)) {
+      return { ...spec, args: { ...spec.args, isVariadic: true } };
+    }
+    return spec;
+  },
+};
+
 const loadSpec = async (cmd: CommandToken[]): Promise<Fig.Spec | undefined> => {
   const rootToken = cmd.at(0);
   if (!rootToken?.complete) {
@@ -59,7 +71,10 @@ const loadSpec = async (cmd: CommandToken[]): Promise<Fig.Spec | undefined> => {
   if (specSet[rootToken.token]) {
     const specPath = specSet[rootToken.token];
     const importPath = path.isAbsolute(specPath) ? pathToFileURL(specPath).href : specPath;
-    const spec = (await import(importPath)).default;
+    let spec = (await import(importPath)).default;
+    if (specPatches[rootToken.token]) {
+      spec = specPatches[rootToken.token](spec);
+    }
     loadedSpecs[rootToken.token] = spec;
     return spec;
   }
