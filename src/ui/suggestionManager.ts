@@ -35,6 +35,7 @@ export class SuggestionManager {
   #suggestBlob?: SuggestionBlob;
   #shell: Shell;
   #hideSuggestions: boolean = false;
+  #expectedCommand: string = "";
 
   constructor(terminal: ISTerm, shell: Shell) {
     this.#term = terminal;
@@ -44,12 +45,40 @@ export class SuggestionManager {
     this.#shell = shell;
   }
 
+  get hasSuggestions(): boolean {
+    return this.#suggestBlob != null && this.#suggestBlob.suggestions.length > 0;
+  }
+
   private async _loadSuggestions(): Promise<void> {
     const commandText = this.#term.getCommandState().commandText;
     if (!commandText) {
       this.#command = "";
+      this.#hideSuggestions = false;
+      this.#expectedCommand = "";
     }
-    if (!commandText || this.#hideSuggestions) {
+    if (this.#hideSuggestions) {
+      if (this.#expectedCommand) {
+        // After acceptance: stay hidden until PTY echo completes
+        if (commandText === this.#expectedCommand) {
+          this.#hideSuggestions = false;
+          this.#expectedCommand = "";
+        } else {
+          this.#suggestBlob = undefined;
+          this.#activeSuggestionIdx = 0;
+          return;
+        }
+      } else {
+        // After ESC dismiss: stay hidden until command text changes
+        if (commandText && commandText !== this.#command) {
+          this.#hideSuggestions = false;
+        } else {
+          this.#suggestBlob = undefined;
+          this.#activeSuggestionIdx = 0;
+          return;
+        }
+      }
+    }
+    if (!commandText) {
       this.#suggestBlob = undefined;
       this.#activeSuggestionIdx = 0;
       return;
@@ -150,16 +179,12 @@ export class SuggestionManager {
 
   update(keyPress: KeyPress): boolean {
     const { name, shift, ctrl } = keyPress;
-    if (name == "return") {
-      this.#term.clearCommand(); // clear the current command on enter
-    }
-
-    // if suggestions are hidden, keep them hidden until during command navigation
-    if (this.#hideSuggestions) {
-      this.#hideSuggestions = name == "up" || name == "down";
-    }
 
     if (!this.#suggestBlob) {
+      // If no suggestions are available and user presses enter, clear command
+      if (name == "return") {
+        this.#term.clearCommand(); // clear the current command on enter
+      }
       return false;
     }
     const {
@@ -184,7 +209,16 @@ export class SuggestionManager {
         return false;
       }
       this.#term.write(chars);
+      // Compute expected command after PTY echo to suppress intermediate suggestions
+      this.#expectedCommand = this.#command + chars;
+      this.#hideSuggestions = true;
+      this.#suggestBlob = undefined;
+      this.#activeSuggestionIdx = 0;
     } else {
+      // If enter was pressed but not handled as acceptSuggestion, clear command
+      if (name == "return") {
+        this.#term.clearCommand(); // clear the current command on enter
+      }
       return false;
     }
     log.debug({ msg: "handled keypress", ...keyPress });

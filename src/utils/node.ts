@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import sea from "node:sea";
 import fsAsync from "node:fs/promises";
 import fs from "node:fs";
@@ -9,6 +10,9 @@ import { nativeResourcesPath, shellResourcesPath, specResourcesPath, versionReso
 import { getVersion } from "./version.js";
 
 const ASSET_PATH_SEP = "____";
+// Resolve project root from module location (build/utils/node.js -> project root)
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const projectRoot = path.resolve(__dirname, "..", "..");
 
 type AssetType = "native" | "shell" | "spec";
 
@@ -83,7 +87,7 @@ const permissionNativeModules = async (): Promise<void> => {
 
 const unpackSpecs = async (): Promise<void> => {
   if (!sea.isSea()) {
-    const autocompleteSpecFolderPath = path.join(process.cwd(), "node_modules", "@withfig", "autocomplete", "build");
+    const autocompleteSpecFolderPath = path.join(projectRoot, "node_modules", "@withfig", "autocomplete", "build");
     const entries = await fsAsync.readdir(autocompleteSpecFolderPath, { recursive: true });
     const files = entries
       .filter((f) => {
@@ -104,7 +108,7 @@ const unpackSpecs = async (): Promise<void> => {
 
 const unpackShellFiles = async (): Promise<void> => {
   if (!sea.isSea()) {
-    const shellFolderPath = path.join(process.cwd(), "shell");
+    const shellFolderPath = path.join(projectRoot, "shell");
     const files = (await fsAsync.readdir(shellFolderPath)).map((f) => path.basename(f));
 
     await copyFiles("shell", files, shellFolderPath);
